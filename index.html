@@ -1,0 +1,1116 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="dark">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Shift Planner</title>
+<meta name="description" content="Operations shift-coverage planner — visual weekly/daily/monthly coverage, gap detection against per-shift targets, bulk scheduling and live working-time rule validation. Runs fully client-side on synthetic data.">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,400;9..144,600;9..144,900&family=Spline+Sans+Mono:wght@400;500;600&family=Archivo:wght@400;500;600;700&display=swap" rel="stylesheet">
+<style>
+/* ============================================================
+   DESIGN TOKENS — shared ecosystem identity (dark + light)
+   Identical token set to VIP Performance Tracker.
+   ============================================================ */
+:root{
+  --bg:#0a0c10; --panel:#12161d; --panel2:#171c25; --panel3:#0f1319;
+  --line:#252c38; --line2:#1c222c;
+  --txt:#e6e9ef; --muted:#8a93a3; --dim:#5f6877;
+  --acid:#c4f042; --acid-fill:#c4f042; --blue:#6ea8ff; --amber:#ffb347; --red:#ff6b5e; --violet:#b89dff;
+  --gold:#ffd24a; --silver:#c4cdd8; --bronze:#cd8b53; --none:#3a414d;
+  --grid:#1c222c; --thumb:rgba(196,240,66,.12);
+  --shadow:0 8px 30px rgba(0,0,0,.45);
+  /* shift colors */
+  --morning:#c4f042; --afternoon:#6ea8ff; --night:#b89dff;
+  --morning-fill:rgba(196,240,66,.14); --afternoon-fill:rgba(110,168,255,.16); --night-fill:rgba(184,157,255,.16);
+  --ok:#c4f042; --warn:#ffb347; --bad:#ff6b5e;
+}
+[data-theme="light"]{
+  --bg:#f3f5f8; --panel:#ffffff; --panel2:#eef1f5; --panel3:#f7f9fb;
+  --line:#e2e6ec; --line2:#edf0f4;
+  --txt:#161a20; --muted:#5a6472; --dim:#8893a2;
+  --acid:#5f7d12; --acid-fill:#a9d12e; --blue:#2f6fd0; --amber:#c87f12; --red:#d8463a; --violet:#7a5cf0;
+  --gold:#cc9a1e; --silver:#8a96a4; --bronze:#a8703e; --none:#cfd6df;
+  --grid:#e6eaf0; --thumb:rgba(95,125,18,.12);
+  --shadow:0 8px 24px rgba(20,30,50,.08);
+  --morning:#5f7d12; --afternoon:#2f6fd0; --night:#7a5cf0;
+  --morning-fill:rgba(169,209,46,.20); --afternoon-fill:rgba(47,111,208,.14); --night-fill:rgba(122,92,240,.14);
+  --ok:#5f7d12; --warn:#c87f12; --bad:#d8463a;
+}
+*{margin:0;padding:0;box-sizing:border-box}
+html{scroll-behavior:smooth}
+body{
+  background:var(--bg);color:var(--txt);font-family:'Archivo',sans-serif;
+  font-size:14px;line-height:1.5;-webkit-font-smoothing:antialiased;
+  transition:background .3s ease,color .3s ease;
+  background-image:radial-gradient(circle at 12% -8%,rgba(196,240,66,.05),transparent 38%),radial-gradient(circle at 92% 4%,rgba(110,168,255,.04),transparent 34%);
+}
+.mono{font-family:'Spline Sans Mono',monospace}
+.serif{font-family:'Fraunces',serif}
+.wrap{max-width:1180px;margin:0 auto;padding:22px 26px 70px}
+.sr-only{position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0 0 0 0)}
+.k{font-family:'Spline Sans Mono',monospace;font-size:10px;letter-spacing:.1em;text-transform:uppercase;color:var(--dim)}
+a{color:var(--blue);text-decoration:none}
+::selection{background:var(--thumb)}
+
+/* header */
+.appbar{display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:14px;margin-bottom:18px}
+.brand{display:flex;align-items:center;gap:12px}
+.logo{width:34px;height:34px;border-radius:8px;background:var(--acid-fill);color:#0a0c10;display:flex;align-items:center;justify-content:center;font-weight:600;font-family:'Spline Sans Mono';font-size:18px}
+.brand h1{font-family:'Fraunces',serif;font-weight:600;font-size:21px;line-height:1}
+.brand .sub{font-family:'Spline Sans Mono';font-size:9.5px;letter-spacing:.08em;text-transform:uppercase;color:var(--dim);margin-top:3px}
+.toprt{display:flex;gap:9px;align-items:center;flex-wrap:wrap}
+.seg{display:flex;border:1px solid var(--line);border-radius:9px;overflow:hidden}
+.seg button{font-family:'Spline Sans Mono';font-size:11px;padding:8px 13px;background:transparent;border:none;color:var(--muted);cursor:pointer;transition:.15s;border-left:1px solid var(--line)}
+.seg button:first-child{border-left:none}
+.seg button.on{background:var(--thumb);color:var(--acid)}
+.iconbtn{border:1px solid var(--line);background:var(--panel);border-radius:9px;width:38px;height:36px;color:var(--muted);cursor:pointer;font-size:16px;display:flex;align-items:center;justify-content:center;transition:.15s}
+.iconbtn:hover{border-color:var(--line);color:var(--txt);background:var(--panel2)}
+
+/* synthetic banner */
+.synbanner{display:flex;align-items:center;gap:8px;background:linear-gradient(90deg,rgba(255,179,71,.08),transparent);border:1px solid rgba(255,179,71,.22);border-radius:9px;padding:8px 13px;margin-bottom:16px;font-size:12px;color:var(--amber)}
+.synbanner b{font-weight:600}
+
+/* operation filter */
+.opfilter{margin-bottom:11px}
+.chips{display:flex;gap:8px;flex-wrap:wrap}
+.chip{font-family:'Spline Sans Mono';font-size:11.5px;padding:7px 12px;border:1px solid var(--line);border-radius:9px;color:var(--muted);background:var(--panel);cursor:pointer;transition:.15s;user-select:none;white-space:nowrap}
+.chip:hover{border-color:var(--dim);color:var(--txt)}
+.chip.on{border-color:var(--acid);color:var(--acid);background:var(--thumb)}
+.filterbar{background:var(--panel3);border:1px solid var(--line2);border-radius:11px;margin-bottom:18px;overflow:hidden}
+.filterhead{display:flex;align-items:center;gap:10px;padding:11px 14px;cursor:pointer;user-select:none}
+.filterhead .k{flex:1}
+.filterhead .caret{transition:transform .25s;color:var(--dim)}
+.filterbar.open .caret{transform:rotate(180deg)}
+.filterbody{display:none;padding:0 14px 14px;flex-direction:column;gap:13px}
+.filterbar.open .filterbody{display:flex}
+.frow{display:flex;gap:9px;align-items:center;flex-wrap:wrap}
+.frow > .k{min-width:62px}
+.search{flex:1;min-width:160px;background:var(--panel);border:1px solid var(--line);border-radius:9px;padding:8px 12px;color:var(--txt);font-family:'Archivo';font-size:13px}
+.search:focus{outline:none;border-color:var(--acid)}
+.pill{font-family:'Spline Sans Mono';font-size:10px;padding:4px 9px;border-radius:6px;background:var(--line2);color:var(--muted)}
+
+/* tabs */
+.tabs{display:flex;gap:22px;border-bottom:1px solid var(--line);margin-bottom:22px;overflow-x:auto}
+.tab{padding:0 0 11px;background:none;border:none;border-bottom:2px solid transparent;color:var(--muted);font-family:'Archivo';font-size:14px;font-weight:500;cursor:pointer;white-space:nowrap;transition:.15s}
+.tab:hover{color:var(--txt)}
+.tab.on{color:var(--txt);border-bottom-color:var(--acid)}
+
+/* generic cards / grid */
+.grid{display:grid;gap:12px}
+.card{background:var(--panel);border:1px solid var(--line);border-radius:13px;padding:15px 17px;box-shadow:var(--shadow)}
+.metric{background:var(--panel2);border-radius:11px;padding:13px 15px}
+.metric .v{font-family:'Spline Sans Mono';font-size:23px;font-weight:600;margin-top:4px;font-variant-numeric:tabular-nums}
+.metric .d{font-family:'Spline Sans Mono';font-size:10px;margin-top:2px}
+.up{color:var(--acid)} .down{color:var(--amber)} .flat{color:var(--muted)} .danger{color:var(--red)}
+.sectitle{display:flex;justify-content:space-between;align-items:baseline;margin:24px 0 11px;flex-wrap:wrap;gap:8px}
+.sectitle h2{font-family:'Fraunces';font-weight:600;font-size:18px}
+
+/* sub-toolbar (granularity + actions) */
+.subbar{display:flex;align-items:center;gap:10px;margin-bottom:14px;flex-wrap:wrap}
+.subbar .k{white-space:nowrap}
+.navbtns{display:flex;gap:6px;align-items:center}
+.btn{font-family:'Spline Sans Mono';font-size:12px;padding:8px 13px;border:1px solid var(--line);background:var(--panel);color:var(--muted);border-radius:9px;cursor:pointer;transition:.15s;display:inline-flex;align-items:center;gap:6px;white-space:nowrap}
+.btn:hover{border-color:var(--dim);color:var(--txt);background:var(--panel2)}
+.btn.acid{border-color:var(--acid);color:var(--acid);background:var(--thumb)}
+.btn.sm{padding:6px 10px;font-size:11px}
+.btn:disabled{opacity:.4;cursor:not-allowed}
+select.sel{background:var(--panel);border:1px solid var(--line);border-radius:9px;padding:8px 12px;color:var(--txt);font-family:'Archivo';font-size:13px;cursor:pointer}
+select.sel:focus{outline:none;border-color:var(--acid)}
+.rangelabel{font-family:'Spline Sans Mono';font-size:12px;color:var(--txt);min-width:150px;text-align:center}
+
+/* ===== WEEK GRID ===== */
+.gridwrap{border:1px solid var(--line);border-radius:12px;overflow:hidden;background:var(--panel);box-shadow:var(--shadow)}
+.gscroll{overflow-x:auto}
+.wgrid{width:100%;border-collapse:collapse;min-width:760px}
+.wgrid th,.wgrid td{border-right:1px solid var(--line2);border-bottom:1px solid var(--line2)}
+.wgrid th:last-child,.wgrid td:last-child{border-right:none}
+.wgrid thead th{background:var(--panel3);padding:9px 6px;text-align:center;vertical-align:top;position:sticky;top:0;z-index:2}
+.wgrid thead th.agcol{text-align:left;padding-left:13px;width:168px;min-width:168px}
+.daylabel{font-family:'Spline Sans Mono';font-size:10px;color:var(--muted);text-transform:uppercase;letter-spacing:.05em}
+.daydate{font-family:'Spline Sans Mono';font-size:9px;color:var(--dim);margin-top:1px}
+.daycov{display:flex;gap:7px;justify-content:center;margin-top:5px;font-family:'Spline Sans Mono';font-size:10px;font-weight:500}
+.daycov span{display:inline-flex;align-items:center;gap:2px}
+.cov-m{color:var(--morning)} .cov-a{color:var(--afternoon)} .cov-n{color:var(--night)}
+.cov-gap{color:var(--bad) !important}
+.covdot{font-size:7px;vertical-align:1px}
+.grouprow td{background:var(--panel3);font-family:'Spline Sans Mono';font-size:11px;color:var(--muted);cursor:pointer;user-select:none;padding:7px 13px}
+.grouprow .gcaret{transition:transform .2s;display:inline-block}
+.grouprow.collapsed .gcaret{transform:rotate(-90deg)}
+.agcell{padding:7px 13px;white-space:nowrap}
+.agcell .nm{display:inline-flex;align-items:center;gap:8px;cursor:pointer}
+.avatar{width:23px;height:23px;border-radius:50%;display:inline-flex;align-items:center;justify-content:center;font-size:9px;font-weight:600;font-family:'Spline Sans Mono'}
+.agcheck{margin-right:8px;accent-color:var(--acid);cursor:pointer;vertical-align:middle}
+.warnflag{color:var(--bad);font-size:11px;cursor:help;margin-left:5px}
+.rowbad{background:rgba(255,107,94,.05)}
+.scell{text-align:center;padding:5px 5px;cursor:pointer;transition:background .12s}
+.scell:hover{background:var(--panel2)}
+.schip{display:inline-block;font-size:10px;padding:3px 8px;border-radius:6px;font-family:'Spline Sans Mono';white-space:nowrap}
+.schip.s-morning{background:var(--morning-fill);color:var(--morning)}
+.schip.s-afternoon{background:var(--afternoon-fill);color:var(--afternoon)}
+.schip.s-night{background:var(--night-fill);color:var(--night)}
+.schip.s-off{color:var(--none);border:1px dashed var(--line)}
+.schip.violation{outline:1.5px solid var(--bad);outline-offset:0}
+
+/* legend */
+.legendrow{display:flex;gap:14px;flex-wrap:wrap;font-family:'Spline Sans Mono';font-size:9.5px;color:var(--muted);margin:12px 2px 4px;align-items:center}
+.legendrow i{width:9px;height:9px;border-radius:2px;display:inline-block;margin-right:4px;vertical-align:0}
+
+/* shift selector popover (inline, in-flow safe via fixed overlay) */
+.selpop{position:fixed;z-index:60;background:var(--panel);border:1px solid var(--line);border-radius:11px;box-shadow:var(--shadow);padding:7px;display:none;flex-direction:column;gap:4px;min-width:150px}
+.selpop.show{display:flex}
+.selpop .opt{font-family:'Spline Sans Mono';font-size:12px;padding:8px 11px;border-radius:7px;cursor:pointer;display:flex;align-items:center;gap:8px;color:var(--txt)}
+.selpop .opt:hover{background:var(--panel2)}
+.selpop .opt .sw{width:10px;height:10px;border-radius:3px;display:inline-block}
+.selpop .ttl{font-family:'Spline Sans Mono';font-size:9px;letter-spacing:.1em;text-transform:uppercase;color:var(--dim);padding:4px 11px 2px}
+
+/* ===== DAY VIEW ===== */
+.daycols{display:grid;grid-template-columns:repeat(3,1fr);gap:12px}
+@media(max-width:720px){.daycols{grid-template-columns:1fr}}
+.daycol{background:var(--panel);border:1px solid var(--line);border-radius:13px;overflow:hidden;box-shadow:var(--shadow)}
+.daycol h3{font-family:'Fraunces';font-size:16px;font-weight:600;padding:13px 15px 4px;display:flex;align-items:center;gap:8px}
+.daycol .hours{font-family:'Spline Sans Mono';font-size:10px;color:var(--dim);padding:0 15px}
+.daycol .covbar{margin:10px 15px;font-family:'Spline Sans Mono';font-size:11px;display:flex;justify-content:space-between;align-items:center}
+.daycol .agentlist{padding:4px 0 10px}
+.daycol .dagent{display:flex;align-items:center;gap:8px;padding:6px 15px;font-size:12.5px}
+.daycol .opmini{font-family:'Spline Sans Mono';font-size:9px;color:var(--dim);margin-left:auto}
+.gapbadge{font-family:'Spline Sans Mono';font-size:9px;padding:3px 8px;border-radius:6px}
+.gapbadge.ok{background:var(--thumb);color:var(--acid)}
+.gapbadge.gap{background:rgba(255,107,94,.12);color:var(--bad)}
+
+/* ===== MONTH HEATMAP ===== */
+.heatwrap{overflow-x:auto;border:1px solid var(--line);border-radius:12px;background:var(--panel);box-shadow:var(--shadow)}
+.heat{border-collapse:collapse;min-width:760px;width:100%}
+.heat th{font-family:'Spline Sans Mono';font-size:8.5px;color:var(--dim);padding:6px 3px;text-align:center;font-weight:400}
+.heat th.rowlbl,.heat td.rowlbl{text-align:left;padding:7px 11px;white-space:nowrap;font-family:'Spline Sans Mono';font-size:10.5px;color:var(--muted);position:sticky;left:0;background:var(--panel);z-index:1;min-width:150px}
+.heat td{width:21px;height:24px;text-align:center;font-family:'Spline Sans Mono';font-size:9px;border:1px solid var(--bg)}
+.heat .wend{opacity:.6}
+
+/* ===== TABLES (workload / analysis) ===== */
+.tablewrap{border:1px solid var(--line);border-radius:13px;overflow:hidden;box-shadow:var(--shadow)}
+.gscroll2{overflow-x:auto}
+table.lt{width:100%;border-collapse:collapse;font-size:13px;min-width:640px}
+table.lt thead th{position:sticky;top:0;background:var(--panel3);font-family:'Spline Sans Mono';font-size:9.5px;letter-spacing:.08em;text-transform:uppercase;color:var(--dim);text-align:left;padding:11px 14px;cursor:pointer;user-select:none;border-bottom:1px solid var(--line);z-index:2}
+table.lt thead th .arr{opacity:.4;font-size:9px}
+table.lt thead th.sorted .arr{opacity:1;color:var(--acid)}
+table.lt thead th.num,table.lt td.num{text-align:right;font-variant-numeric:tabular-nums;font-family:'Spline Sans Mono'}
+table.lt thead th.ctr,table.lt td.ctr{text-align:center}
+table.lt tbody td{padding:10px 14px;border-bottom:1px solid var(--line2)}
+table.lt tbody tr:last-child td{border-bottom:none}
+table.lt tbody tr.clickable{cursor:pointer;transition:background .12s}
+table.lt tbody tr.clickable:hover{background:var(--panel2)}
+.dot{width:9px;height:9px;border-radius:50%;display:inline-block}
+.dot.ok{background:var(--ok)} .dot.warn{background:var(--warn)} .dot.bad{background:var(--bad)}
+.rulecell{display:inline-flex;gap:6px;align-items:center}
+
+/* insight */
+.insight{display:flex;align-items:flex-start;gap:9px;background:var(--panel3);border:1px solid var(--line2);border-radius:11px;padding:11px 14px;margin-bottom:16px;font-size:12.5px;color:var(--muted)}
+.insight b{color:var(--txt);font-weight:500}
+.insight .idot{color:var(--acid)}
+
+/* schedule builder */
+.schedwrap{display:grid;grid-template-columns:1fr;gap:14px}
+.bulkbar{background:var(--panel);border:1px solid var(--line);border-radius:13px;padding:15px 17px;box-shadow:var(--shadow)}
+.bulkbar h3{font-family:'Fraunces';font-size:16px;font-weight:600;margin-bottom:4px}
+.bulkbar .sub{font-size:12px;color:var(--muted);margin-bottom:14px}
+.bulkrow{display:flex;gap:10px;align-items:center;flex-wrap:wrap;margin-bottom:12px}
+.bulkrow .k{min-width:78px}
+.daypick{display:flex;gap:5px;flex-wrap:wrap}
+.daypick .dchip{font-family:'Spline Sans Mono';font-size:11px;padding:6px 10px;border:1px solid var(--line);border-radius:8px;color:var(--muted);cursor:pointer;user-select:none}
+.daypick .dchip.on{border-color:var(--acid);color:var(--acid);background:var(--thumb)}
+.selcount{font-family:'Spline Sans Mono';font-size:11px;color:var(--muted)}
+.selcount b{color:var(--acid)}
+.applymsg{font-family:'Spline Sans Mono';font-size:11.5px;margin-top:8px}
+.applymsg.ok{color:var(--acid)} .applymsg.warn{color:var(--amber)}
+
+/* state boxes */
+.statebox{text-align:center;padding:46px 24px;color:var(--muted)}
+.statebox .big{font-size:40px;margin-bottom:10px}
+.statebox h3{font-family:'Fraunces';font-size:21px;color:var(--txt);margin-bottom:8px;font-weight:600}
+.statebox p{font-size:13px;max-width:420px;margin:0 auto 18px}
+
+/* modal (CSV map) */
+.overlay{position:fixed;inset:0;background:rgba(0,0,0,.6);display:none;align-items:center;justify-content:center;z-index:50;padding:20px}
+.overlay.show{display:flex}
+.modal{background:var(--panel);border:1px solid var(--line);border-radius:15px;max-width:560px;width:100%;max-height:86vh;overflow:auto;box-shadow:var(--shadow)}
+.modal header{padding:18px 20px 0;display:flex;justify-content:space-between;align-items:flex-start}
+.modal h3{font-family:'Fraunces';font-size:19px;font-weight:600}
+.modal .body{padding:16px 20px 20px}
+.maprow{display:grid;grid-template-columns:1fr 1fr;gap:10px;align-items:center;margin-bottom:9px}
+.maprow label{font-size:12.5px;color:var(--muted)}
+.maprow .req{color:var(--amber)}
+
+.footer{margin-top:44px;padding-top:20px;border-top:1px solid var(--line);font-family:'Spline Sans Mono';font-size:11px;color:var(--dim);line-height:1.7}
+.hide{display:none !important}
+@media(max-width:560px){.wrap{padding:16px 14px 60px}.maprow{grid-template-columns:1fr}}
+</style>
+</head>
+<body>
+<h2 class="sr-only">Shift Planner — operations coverage planner showing weekly, daily and monthly shift coverage, gap detection against per-shift targets, bulk scheduling and working-time rule validation on synthetic data.</h2>
+<div class="wrap">
+
+  <!-- ===================== HEADER ===================== -->
+  <div class="appbar">
+    <div class="brand">
+      <div class="logo">S</div>
+      <div>
+        <h1>Shift Planner</h1>
+        <div class="sub" id="datasrclabel">Synthetic demo data · no real records</div>
+      </div>
+    </div>
+    <div class="toprt">
+      <div class="seg" role="tablist" aria-label="Data source">
+        <button id="src-demo" class="on" type="button">Demo data</button>
+        <button id="src-upload" type="button">↑ Upload CSV</button>
+      </div>
+      <button class="btn" id="exportBtn" type="button" title="Export current roster to CSV">↓ CSV</button>
+      <button class="iconbtn" id="themeBtn" type="button" aria-label="Toggle dark / light theme">◐</button>
+    </div>
+  </div>
+
+  <div class="synbanner"><span>⚠</span><span><b>Synthetic dataset.</b> Names, markets and coverage targets are randomly generated. No proprietary or real customer data is present.</span></div>
+
+  <!-- ===================== OPERATION FILTER ===================== -->
+  <div class="opfilter" id="opfilterRow">
+    <div class="k" style="margin-bottom:7px">Operation</div>
+    <div class="chips" id="opChips"></div>
+  </div>
+
+  <!-- ===================== COLLAPSIBLE FILTERS ===================== -->
+  <div class="filterbar" id="filterbar">
+    <div class="filterhead" id="filterhead">
+      <span class="caret">▾</span>
+      <span class="k">Filters</span>
+      <span class="pill" id="filtersummary">all markets · all shifts</span>
+    </div>
+    <div class="filterbody">
+      <div class="frow"><span class="k">Markets</span><div class="chips" id="marketChips"></div></div>
+      <div class="frow"><span class="k">Shift</span><div class="chips" id="shiftChips"></div></div>
+      <div class="frow"><span class="k">Agent</span><input class="search" id="searchInput" placeholder="Search agent by name…" autocomplete="off"></div>
+    </div>
+  </div>
+
+  <!-- ===================== TABS ===================== -->
+  <div class="tabs" role="tablist">
+    <button class="tab on" data-tab="coverage" role="tab">Coverage</button>
+    <button class="tab" data-tab="schedule" role="tab">Schedule</button>
+    <button class="tab" data-tab="workload" role="tab">Workload</button>
+    <button class="tab" data-tab="analysis" role="tab">Analysis</button>
+  </div>
+
+  <!-- ===================== VIEWS ===================== -->
+  <div id="view-coverage"></div>
+  <div id="view-schedule" class="hide"></div>
+  <div id="view-workload" class="hide"></div>
+  <div id="view-analysis" class="hide"></div>
+
+  <div class="footer">
+    // Shift Planner · client-side single-file app · runs on GitHub Pages with no backend<br>
+    // Shifts: Morning 06–14 · Afternoon 14–22 · Night 22–06 · coverage target per operation: 4 / 4 / 2 weekdays, 2 / 2 / 1 weekends<br>
+    // Rules validated live (never blocking): max 5 working days &amp; 2 rest per rolling week · min 12h between shifts · one shift per day · shares the agent roster, operations and seed of the VIP Performance Tracker
+  </div>
+
+</div>
+
+<!-- shift selector popover -->
+<div class="selpop" id="selpop"></div>
+
+<!-- CSV mapping modal -->
+<div class="overlay" id="mapOverlay">
+  <div class="modal">
+    <header>
+      <h3>Map your columns</h3>
+      <button class="iconbtn" id="mapClose" aria-label="Close">✕</button>
+    </header>
+    <div class="body">
+      <p style="font-size:13px;color:var(--muted);margin-bottom:14px">We auto-detected the columns below. Agent, date and shift are required to build a roster. Market and operation are optional.</p>
+      <div id="mapRows"></div>
+      <div id="mapMsg" style="font-size:12px;color:var(--red);margin-top:6px"></div>
+      <div style="display:flex;gap:9px;margin-top:16px">
+        <button class="btn acid" id="mapApply" type="button">Load roster</button>
+        <button class="btn" id="mapCancel" type="button">Cancel</button>
+      </div>
+    </div>
+  </div>
+</div>
+<input type="file" id="fileInput" accept=".csv,.tsv,.txt" class="hide">
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/PapaParse/5.4.1/papaparse.min.js"></script>
+<script>
+"use strict";
+/* ============================================================
+   SHIFT PLANNER
+   Single-file operations coverage planner. No backend.
+   Shares the agent roster, operations, markets and seed of the
+   VIP Performance Tracker so an agent is the same person in both.
+   Roster is generated deterministically, then editable; edits
+   persist to localStorage.
+   ============================================================ */
+
+/* ---------- deterministic PRNG (mulberry32) — identical to VPT ---------- */
+function mulberry32(a){return function(){a|=0;a=a+0x6D2B79F5|0;let t=Math.imul(a^a>>>15,1|a);t=t+Math.imul(t^t>>>7,61|t)^t;return((t^t>>>14)>>>0)/4294967296;};}
+function gauss(rng,mean,sd){let u=0,v=0;while(u===0)u=rng();while(v===0)v=rng();return mean+sd*Math.sqrt(-2*Math.log(u))*Math.cos(2*Math.PI*v);}
+function clamp(x,a,b){return Math.max(a,Math.min(b,x));}
+
+/* ---------- config (shared identity with VPT) ---------- */
+const OPS=[
+  {id:'mad',name:'Madrid',flag:'🇪🇸'},
+  {id:'ber',name:'Berlin',flag:'🇩🇪'},
+  {id:'waw',name:'Warsaw',flag:'🇵🇱'},
+  {id:'dub',name:'Dublin',flag:'🇮🇪'},
+];
+const MARKETS=[
+  {code:'AUR',name:'Aurelia'},{code:'BOR',name:'Borealis'},{code:'CAL',name:'Caldera'},
+  {code:'DOR',name:'Doravia'},{code:'ELD',name:'Eldmark'},{code:'FEN',name:'Fennmark'},
+  {code:'GRA',name:'Granvik'},{code:'HAL',name:'Hallowe'},{code:'IRO',name:'Ironholt'},
+  {code:'JOR',name:'Jorvik'}
+];
+/* Shifts: same 3 ids as VPT (morning/late/night) so data crosses; only "late" is
+   re-labelled "Afternoon". Hour windows added (VPT didn't need them). */
+const SHIFTS=[
+  {id:'morning',  name:'Morning',  short:'M', icon:'🌅', start:6,  end:14, color:'morning'},
+  {id:'late',     name:'Afternoon',short:'A', icon:'🌆', start:14, end:22, color:'afternoon'},
+  {id:'night',    name:'Night',    short:'N', icon:'🌙', start:22, end:30, color:'night'},  // 30 = 06 next day
+];
+const SHIFT_IDS=SHIFTS.map(s=>s.id);
+const OFF='off';
+const AGENTS_PER_OP=12;
+const WEEKS=4;                       // roster horizon
+const DAYS=WEEKS*7;                  // 28 days
+
+/* coverage targets per operation, per shift — weekday vs weekend */
+const TARGET_WEEKDAY={morning:3,late:2,night:2};
+const TARGET_WEEKEND={morning:2,late:1,night:1};
+
+/* working-time rules */
+const RULE_MAX_WORK=5;               // max working days per rolling 7-day window
+const RULE_MIN_REST=2;               // implied: >=2 rest days per 7
+const RULE_MIN_GAP_H=12;             // min hours between consecutive shifts
+
+const NAMES={
+  mad:[['Lucia','Romero'],['Mateo','Garcia'],['Valentina','Ortega'],['Diego','Navarro'],['Sofia','Delgado'],['Pablo','Serrano'],['Carmen','Ibanez'],['Alvaro','Mendez'],['Elena','Castro'],['Hugo','Vidal'],['Marta','Reyes'],['Nicolas','Aguirre']],
+  ber:[['Maximilian','Kohler'],['Lena','Brandt'],['Felix','Wagner'],['Hannah','Vogel'],['Jonas','Keller'],['Mia','Schuster'],['Lukas','Hofmann'],['Emilia','Frank'],['Paul','Brunner'],['Clara','Lang'],['Tim','Albrecht'],['Greta','Sommer']],
+  waw:[['Jakub','Nowak'],['Zofia','Lewandowska'],['Antoni','Wojcik'],['Maja','Kaminska'],['Kacper','Zielinski'],['Lena','Szymanska'],['Filip','Wozniak'],['Alicja','Dabrowska'],['Szymon','Kozlowski'],['Julia','Mazur'],['Wiktor','Krawczyk'],['Hanna','Piotrowska']],
+  dub:[['Sean','Doyle'],['Aoife','Murphy'],['Cian','OBrien'],['Saoirse','Walsh'],['Liam','Kelly'],['Niamh','Ryan'],['Conor','Byrne'],['Emer','Lynch'],['Darragh','Quinn'],['Roisin','Connolly'],['Eoin','Gallagher'],['Sinead','Brennan']]
+};
+
+const LS_ROSTER='sp-roster', LS_THEME='sp-theme', LS_TARGETS='sp-targets';
+
+/* ---------- state ---------- */
+let STATE={agents:[],dates:[],assign:{},source:'demo'};  // assign[agentId][dateIdx] = shiftId | 'off'
+let TARGETS={weekday:{...TARGET_WEEKDAY},weekend:{...TARGET_WEEKEND}};
+let FILTER={ops:new Set(),markets:new Set(),shifts:new Set(),search:''};
+let activeTab='coverage';
+let covGran='week';          // week | day | month
+let weekOffset=0;            // which week is shown (0..WEEKS-1)
+let dayIdxSel=0;             // selected day for Day view
+let bulkSel=new Set();       // agentIds selected for bulk
+let collapsedGroups=new Set();
+let charts={};
+
+/* ---------- date helpers ---------- */
+const DATA_END=new Date(2026,5,6);   // Jun 6 2026 — same anchor as VPT
+function buildDates(){
+  const start=new Date(DATA_END); start.setDate(DATA_END.getDate()-(DAYS-1));
+  const out=[];
+  for(let i=0;i<DAYS;i++){const d=new Date(start);d.setDate(start.getDate()+i);out.push(d);}
+  return out;
+}
+function isWeekend(d){const w=d.getDay();return w===0||w===6;}
+function nDays(){return STATE.dates?STATE.dates.length:DAYS;}
+function iso(d){return d.toISOString().slice(0,10);}
+function targetFor(dateIdx,shiftId){
+  const d=STATE.dates[dateIdx];
+  return (isWeekend(d)?TARGETS.weekend:TARGETS.weekday)[shiftId];
+}
+
+/* ---------- roster generation ---------- */
+function generateRoster(){
+  const rng=mulberry32(20260606);
+  const agents=[]; let id=0;
+  OPS.forEach(op=>{
+    for(let i=0;i<AGENTS_PER_OP;i++){
+      const nm=NAMES[op.id][i];
+      const m1=Math.floor(rng()*MARKETS.length);
+      let m2=Math.floor(rng()*MARKETS.length); if(m2===m1)m2=(m2+1)%MARKETS.length;
+      const markets=rng()<0.55?[MARKETS[m1].code]:[MARKETS[m1].code,MARKETS[m2].code];
+      agents.push({id:'a'+(id++),first:nm[0],last:nm[1],name:nm[0]+' '+nm[1],op:op.id,opName:op.name,flag:op.flag,markets});
+    }
+  });
+  const dates=buildDates();
+  const assign={};
+  agents.forEach(ag=>{assign[ag.id]=new Array(DAYS).fill(OFF);});
+
+  /* Deterministic, provably-compliant construction.
+     - Each agent has a FIXED shift band (morning / afternoon / night) → no 12h breach.
+     - Each agent has 2 rest days per week, SPACED (e.g. Tue+Fri), so any rolling
+       7-day window contains ≥2 rests → never exceeds 5/7. The rest pattern is
+       staggered across agents in a band so that on any given weekday the number
+       resting is roughly even, keeping daily coverage close to target.
+     dow: 0=Mon … 6=Sun. Spaced rest pairs spanning the whole week (incl. weekends),
+     staggered so each day sheds roughly equal headcount: */
+  const RESTS=[[5,6],[0,3],[1,4],[2,6],[3,5],[0,4],[1,5],[2,4],[0,6],[1,3],[4,6],[2,5]];
+  const BANDS=[['morning',[0,1,2,3,4]],['late',[5,6,7,8]],['night',[9,10,11]]];
+  OPS.forEach(op=>{
+    const roster=agents.filter(a=>a.op===op.id);
+    BANDS.forEach(([sid,idxs])=>{
+      idxs.forEach((ai)=>{
+        const ag=roster[ai];
+        const rest=RESTS[ai];                 // unique pattern per agent index
+        for(let di=0;di<DAYS;di++){
+          const dow=(dates[di].getDay()+6)%7;
+          assign[ag.id][di]=rest.includes(dow)?OFF:sid;
+        }
+      });
+    });
+    /* No post-trim: the explicit-rest roster sits at or just above target every day,
+       which is what a healthy schedule looks like. The only sub-target days are the
+       coverage gaps we plant below. */
+  });
+
+  /* ---- plant a small, legible set of issues (Madrid only) ---- */
+  const mad=agents.filter(a=>a.op==='mad');
+  /* 1) COVERAGE gaps: on two weekdays, send a confirmed on-duty morning agent home,
+     dropping Madrid morning below target so a gap shows in the day header & heatmap. */
+  [3,17].forEach(di=>{
+    const onMorning=mad.filter(a=>assign[a.id][di]==='morning');
+    /* remove two so coverage drops clearly below the morning target (3) → visible gap */
+    for(let r=0;r<2&&onMorning.length-r>0;r++)assign[onMorning[onMorning.length-1-r].id][di]=OFF;
+  });
+  /* 2) 12h-GAP rule violation: two agents forced night→morning on consecutive days.
+     Use afternoon-band agents (idx 5,6) so we don't disturb the morning coverage plant. */
+  if(DAYS>8){assign[mad[5].id][7]='night';assign[mad[5].id][8]='morning';}
+  if(DAYS>12){assign[mad[6].id][11]='night';assign[mad[6].id][12]='morning';}
+  /* 3) OVERWORK rule violation: give one morning agent a clean 6-day straight run. */
+  for(let di=14;di<20&&di<DAYS;di++)assign[mad[0].id][di]='morning';
+
+  return {agents,dates,assign,source:'demo'};
+}
+
+/* ---------- persistence ---------- */
+function saveRoster(){
+  if(STATE.source!=='demo')return;  // only persist demo edits
+  try{localStorage.setItem(LS_ROSTER,JSON.stringify(STATE.assign));
+      localStorage.setItem(LS_TARGETS,JSON.stringify(TARGETS));}catch(e){}
+}
+function loadSavedRoster(){
+  try{
+    const raw=localStorage.getItem(LS_ROSTER);
+    if(raw){const a=JSON.parse(raw);
+      /* only adopt if shape matches current agents/dates */
+      const ok=STATE.agents.every(ag=>Array.isArray(a[ag.id])&&a[ag.id].length===DAYS);
+      if(ok)STATE.assign=a;}
+    const tg=localStorage.getItem(LS_TARGETS);
+    if(tg)TARGETS=JSON.parse(tg);
+  }catch(e){}
+}
+function resetRoster(){
+  try{localStorage.removeItem(LS_ROSTER);localStorage.removeItem(LS_TARGETS);}catch(e){}
+  TARGETS={weekday:{...TARGET_WEEKDAY},weekend:{...TARGET_WEEKEND}};
+  STATE=generateRoster();
+  renderAll();
+}
+
+/* ============================================================
+   RULE ENGINE
+   Returns, per agent, the set of violated (dateIdx, ruleType).
+   Rules: max 5 work / 7 rolling · min 12h between shifts · 1 shift/day.
+   (1 shift/day is structurally enforced by the data model — one slot
+   per cell — but we still surface it if a CSV upload breaks it.)
+   ============================================================ */
+function shiftEndHour(sid){const s=SHIFTS.find(x=>x.id===sid);return s?s.end:null;}
+function shiftStartHour(sid){const s=SHIFTS.find(x=>x.id===sid);return s?s.start:null;}
+
+function agentViolations(agId){
+  const row=STATE.assign[agId];
+  const v={cells:{},rules:new Set()};  // cells[dateIdx] = [ruleType,...]
+  const mark=(di,rule)=>{(v.cells[di]=v.cells[di]||[]).push(rule);v.rules.add(rule);};
+
+  /* 12h gap between consecutive shifts.
+     End hour of day di (night ends 30 => 6 next day) vs start hour of di+1 (+24). */
+  for(let di=0;di<nDays()-1;di++){
+    const a=row[di],b=row[di+1];
+    if(a===OFF||b===OFF)continue;
+    const endA=shiftEndHour(a);            // hours from midnight of day di
+    const startB=shiftStartHour(b)+24;     // hours from midnight of day di
+    if(startB-endA<RULE_MIN_GAP_H){mark(di,'gap');mark(di+1,'gap');}
+  }
+  /* max 5 working days in any rolling 7-day window */
+  for(let di=0;di<nDays();di++){
+    let work=0;const end=Math.min(nDays(),di+7);
+    for(let k=di;k<end;k++)if(row[k]!==OFF)work++;
+    if(end-di===7&&work>RULE_MAX_WORK){
+      for(let k=di;k<end;k++)if(row[k]!==OFF)mark(k,'overwork');
+    }
+  }
+  return v;
+}
+let VIOL_CACHE=null;
+function allViolations(){
+  if(VIOL_CACHE)return VIOL_CACHE;
+  VIOL_CACHE={};
+  STATE.agents.forEach(a=>{VIOL_CACHE[a.id]=agentViolations(a.id);});
+  return VIOL_CACHE;
+}
+function invalidateViol(){VIOL_CACHE=null;}
+
+/* ---------- coverage computation ---------- */
+function visibleAgents(){
+  return STATE.agents.filter(a=>{
+    if(FILTER.ops.size&&!FILTER.ops.has(a.op))return false;
+    if(FILTER.markets.size&&!a.markets.some(m=>FILTER.markets.has(m)))return false;
+    if(FILTER.search&&!a.name.toLowerCase().includes(FILTER.search))return false;
+    return true;
+  });
+}
+/* coverage counts for a given dateIdx, honoring op/market filters (not shift filter) */
+function coverageFor(dateIdx,opSet){
+  const counts={morning:0,late:0,night:0};
+  STATE.agents.forEach(a=>{
+    if(opSet&&opSet.size&&!opSet.has(a.op))return;
+    if(FILTER.markets.size&&!a.markets.some(m=>FILTER.markets.has(m)))return;
+    const s=STATE.assign[a.id][dateIdx];
+    if(s!==OFF&&counts[s]!==undefined)counts[s]++;
+  });
+  return counts;
+}
+/* target honoring current op filter: sum targets of active ops (or all 4) */
+function targetSum(dateIdx,shiftId){
+  const nOps=FILTER.ops.size||OPS.length;
+  return targetFor(dateIdx,shiftId)*nOps;
+}
+
+/* ============================================================
+   RENDER ROUTER
+   ============================================================ */
+function renderAll(){
+  invalidateViol();
+  buildFilterChips();
+  ['coverage','schedule','workload','analysis'].forEach(t=>{
+    document.getElementById('view-'+t).classList.toggle('hide',t!==activeTab);
+  });
+  if(activeTab==='coverage')renderCoverage();
+  if(activeTab==='schedule')renderSchedule();
+  if(activeTab==='workload')renderWorkload();
+  if(activeTab==='analysis')renderAnalysis();
+}
+
+const fmt=n=>Math.round(n).toLocaleString('en-US');
+const fmt1=n=>(Math.round(n*10)/10).toLocaleString('en-US');
+function cssVar(n){return getComputedStyle(document.documentElement).getPropertyValue('--'+n).trim();}
+function initials(name){return name.split(' ').map(x=>x[0]).slice(0,2).join('');}
+function avatarColor(opId){
+  const map={mad:['rgba(196,240,66,.16)','var(--acid)'],ber:['rgba(110,168,255,.16)','var(--blue)'],waw:['rgba(255,179,71,.16)','var(--amber)'],dub:['rgba(184,157,255,.16)','var(--violet)']};
+  const m=map[opId]||['var(--line2)','var(--muted)'];return {bg:m[0],fg:m[1]};
+}
+function shiftMeta(id){return SHIFTS.find(s=>s.id===id);}
+
+/* ============================================================
+   COVERAGE TAB (Week / Day / Month)
+   ============================================================ */
+function renderCoverage(){
+  const el=document.getElementById('view-coverage');
+  const granSeg=`<div class="seg">
+    <button class="${covGran==='week'?'on':''}" data-g="week">Week</button>
+    <button class="${covGran==='day'?'on':''}" data-g="day">Day</button>
+    <button class="${covGran==='month'?'on':''}" data-g="month">Month</button></div>`;
+  let nav='';
+  if(covGran==='week'){
+    const ws=STATE.dates[weekOffset*7], we=STATE.dates[Math.min(nDays()-1,weekOffset*7+6)];
+    nav=`<div class="navbtns"><button class="btn sm" id="prevW" ${weekOffset===0?'disabled':''}>‹</button>
+      <span class="rangelabel">Week ${weekOffset+1} · ${iso(ws).slice(5)} – ${iso(we).slice(5)}</span>
+      <button class="btn sm" id="nextW" ${weekOffset>=WEEKS-1?'disabled':''}>›</button></div>`;
+  }else if(covGran==='day'){
+    const d=STATE.dates[dayIdxSel];
+    nav=`<div class="navbtns"><button class="btn sm" id="prevD" ${dayIdxSel===0?'disabled':''}>‹</button>
+      <span class="rangelabel">${d.toLocaleDateString('en-US',{weekday:'short',month:'short',day:'numeric'})}</span>
+      <button class="btn sm" id="nextD" ${dayIdxSel>=nDays()-1?'disabled':''}>›</button></div>`;
+  }
+  el.innerHTML=`<div class="subbar">${granSeg}${nav}<span class="k" style="margin-left:auto">${covGran==='week'?'click a cell → shift selector':covGran==='day'?'target vs assigned per shift':'coverage vs target heatmap'}</span></div><div id="covBody"></div>`;
+  el.querySelectorAll('[data-g]').forEach(b=>b.onclick=()=>{covGran=b.dataset.g;syncHash();renderCoverage();});
+  const pw=el.querySelector('#prevW'); if(pw)pw.onclick=()=>{weekOffset--;renderCoverage();};
+  const nw=el.querySelector('#nextW'); if(nw)nw.onclick=()=>{weekOffset++;renderCoverage();};
+  const pd=el.querySelector('#prevD'); if(pd)pd.onclick=()=>{dayIdxSel--;renderCoverage();};
+  const nd=el.querySelector('#nextD'); if(nd)nd.onclick=()=>{dayIdxSel++;renderCoverage();};
+  if(covGran==='week')renderWeek();
+  else if(covGran==='day')renderDay();
+  else renderMonth();
+}
+
+function dayHeaderCoverage(di){
+  const cov=coverageFor(di,FILTER.ops);
+  return SHIFTS.map(s=>{
+    const have=cov[s.id], need=targetSum(di,s.id);
+    const gap=have<need;
+    return `<span class="cov-${s.short.toLowerCase()} ${gap?'cov-gap':''}" title="${s.name}: ${have}/${need}">${s.icon}${have}${gap?'<span class="covdot">⬤</span>':''}</span>`;
+  }).join('');
+}
+
+function renderWeek(){
+  const body=document.getElementById('covBody');
+  const agents=visibleAgents();
+  if(!agents.length){body.innerHTML=emptyBox('No agents match these filters','Clear a market or operation filter.');return;}
+  const viol=allViolations();
+  const dayIdxs=[];for(let i=0;i<7;i++){const di=weekOffset*7+i;if(di<nDays())dayIdxs.push(di);}
+
+  /* header */
+  let head=`<thead><tr><th class="agcol"><span class="k">Agent · ${agents.length}</span></th>`;
+  dayIdxs.forEach(di=>{
+    const d=STATE.dates[di];
+    head+=`<th><div class="daylabel">${d.toLocaleDateString('en-US',{weekday:'short'})}</div><div class="daydate">${iso(d).slice(5)}</div><div class="daycov">${dayHeaderCoverage(di)}</div></th>`;
+  });
+  head+='</tr></thead>';
+
+  /* group by op */
+  const groups={};agents.forEach(a=>{(groups[a.op]=groups[a.op]||[]).push(a);});
+  const order=OPS.map(o=>o.id).filter(id=>groups[id]);
+  let bodyrows='<tbody>';
+  order.forEach(opId=>{
+    const op=OPS.find(o=>o.id===opId);
+    const collapsed=collapsedGroups.has(opId);
+    bodyrows+=`<tr class="grouprow ${collapsed?'collapsed':''}" data-group="${opId}"><td colspan="${dayIdxs.length+1}"><span class="gcaret">▾</span> &nbsp;${op.flag} ${op.name} · ${groups[opId].length} agents</td></tr>`;
+    if(collapsed)return;
+    groups[opId].forEach(a=>{
+      const av=avatarColor(a.op);
+      const hasV=viol[a.id]&&viol[a.id].rules.size>0;
+      bodyrows+=`<tr class="${hasV?'rowbad':''}">
+        <td class="agcell"><input type="checkbox" class="agcheck" data-bulk="${a.id}" ${bulkSel.has(a.id)?'checked':''}>
+          <span class="nm" data-agent="${a.id}"><span class="avatar" style="background:${av.bg};color:${av.fg}">${initials(a.name)}</span>${a.first} ${a.last[0]}.${hasV?`<span class="warnflag" title="${[...viol[a.id].rules].map(ruleLabel).join(' · ')}">⚠</span>`:''}</span></td>`;
+      dayIdxs.forEach(di=>{
+        const s=STATE.assign[a.id][di];
+        const cellV=viol[a.id]&&viol[a.id].cells[di];
+        const chip=s===OFF
+          ? `<span class="schip s-off">off</span>`
+          : `<span class="schip s-${s} ${cellV?'violation':''}">${shiftMeta(s).icon} ${shiftMeta(s).short}</span>`;
+        bodyrows+=`<td class="scell" data-cell="${a.id}:${di}" ${cellV?`title="${cellV.map(ruleLabel).join(' · ')}"`:''}>${chip}</td>`;
+      });
+      bodyrows+='</tr>';
+    });
+  });
+  bodyrows+='</tbody>';
+
+  body.innerHTML=`<div class="gridwrap"><div class="gscroll"><table class="wgrid">${head}${bodyrows}</table></div></div>${weekLegend()}`;
+
+  body.querySelectorAll('tr.grouprow').forEach(tr=>tr.onclick=()=>{const g=tr.dataset.group;collapsedGroups.has(g)?collapsedGroups.delete(g):collapsedGroups.add(g);renderWeek();});
+  body.querySelectorAll('[data-agent]').forEach(n=>n.onclick=e=>{e.stopPropagation();dayIdxSel=weekOffset*7;/* jump not needed */});
+  body.querySelectorAll('[data-bulk]').forEach(cb=>cb.onclick=e=>{e.stopPropagation();const id=cb.dataset.bulk;cb.checked?bulkSel.add(id):bulkSel.delete(id);});
+  body.querySelectorAll('[data-cell]').forEach(c=>c.onclick=e=>{openShiftSelector(c.dataset.cell,e);});
+}
+function weekLegend(){
+  return `<div class="legendrow">
+    ${SHIFTS.map(s=>`<span><i style="background:var(--${s.color})"></i>${s.name} ${String(s.start).padStart(2,'0')}–${(s.end%24).toString().padStart(2,'0')}</span>`).join('')}
+    <span style="color:var(--bad)">⚠ rule violation</span>
+    <span style="color:var(--bad)">⬤ coverage gap vs target</span>
+    <span style="margin-left:auto;color:var(--dim)">target/op: M${TARGETS.weekday.morning} A${TARGETS.weekday.late} N${TARGETS.weekday.night} weekday · M${TARGETS.weekend.morning} A${TARGETS.weekend.late} N${TARGETS.weekend.night} weekend</span>
+  </div>`;
+}
+function ruleLabel(r){return r==='gap'?'<12h between shifts':r==='overwork'?'>5 working days / 7':r==='multi'?'multiple shifts same day':r;}
+
+/* shift selector popover */
+let selCell=null;
+function openShiftSelector(key,evt){
+  selCell=key;
+  const pop=document.getElementById('selpop');
+  pop.innerHTML=`<div class="ttl">Assign shift</div>`+
+    SHIFTS.map(s=>`<div class="opt" data-set="${s.id}"><span class="sw" style="background:var(--${s.color})"></span>${s.icon} ${s.name} <span style="color:var(--dim);margin-left:auto;font-size:10px">${String(s.start).padStart(2,'0')}–${(s.end%24).toString().padStart(2,'0')}</span></div>`).join('')+
+    `<div class="opt" data-set="off"><span class="sw" style="background:var(--none)"></span>Off / rest</div>`;
+  pop.classList.add('show');
+  const r=evt.currentTarget.getBoundingClientRect();
+  const pw=170,ph=200;
+  let x=r.left,y=r.bottom+6;
+  if(x+pw>innerWidth)x=innerWidth-pw-8;
+  if(y+ph>innerHeight)y=r.top-ph-6;
+  pop.style.left=x+'px';pop.style.top=Math.max(8,y)+'px';
+  pop.querySelectorAll('[data-set]').forEach(o=>o.onclick=()=>{applyCell(selCell,o.dataset.set);pop.classList.remove('show');});
+}
+function applyCell(key,shiftId){
+  const [agId,di]=key.split(':');
+  STATE.assign[agId][+di]=shiftId;
+  invalidateViol();saveRoster();
+  if(activeTab==='coverage'&&covGran==='week')renderWeek();
+  else renderAll();
+}
+document.addEventListener('click',e=>{
+  const pop=document.getElementById('selpop');
+  if(pop&&pop.classList.contains('show')&&!pop.contains(e.target)&&!e.target.closest('[data-cell]'))pop.classList.remove('show');
+});
+
+/* ---------- DAY VIEW ---------- */
+function renderDay(){
+  const body=document.getElementById('covBody');
+  const di=dayIdxSel;
+  const opSet=FILTER.ops;
+  const cols=SHIFTS.map(s=>{
+    const agents=STATE.agents.filter(a=>{
+      if(opSet.size&&!opSet.has(a.op))return false;
+      if(FILTER.markets.size&&!a.markets.some(m=>FILTER.markets.has(m)))return false;
+      if(FILTER.search&&!a.name.toLowerCase().includes(FILTER.search))return false;
+      return STATE.assign[a.id][di]===s.id;
+    });
+    const need=targetSum(di,s.id), have=agents.length, gap=have<need;
+    const list=agents.length?agents.map(a=>{const av=avatarColor(a.op);
+      return `<div class="dagent"><span class="avatar" style="background:${av.bg};color:${av.fg}">${initials(a.name)}</span>${a.first} ${a.last[0]}. <span class="opmini">${a.flag} ${a.markets.join('/')}</span></div>`;}).join('')
+      :`<div class="dagent" style="color:var(--dim)">— nobody assigned —</div>`;
+    return `<div class="daycol">
+      <h3><span style="color:var(--${s.color})">${s.icon}</span> ${s.name}</h3>
+      <div class="hours">${String(s.start).padStart(2,'0')}:00 – ${(s.end%24).toString().padStart(2,'0')}:00</div>
+      <div class="covbar"><span>coverage</span><span class="gapbadge ${gap?'gap':'ok'}">${have} / ${need}${gap?' · gap '+(need-have):' ✓'}</span></div>
+      <div class="agentlist">${list}</div></div>`;
+  }).join('');
+  body.innerHTML=`<div class="daycols">${cols}</div>${weekLegend()}`;
+}
+
+/* ---------- MONTH HEATMAP ---------- */
+function renderMonth(){
+  const body=document.getElementById('covBody');
+  const opSet=FILTER.ops.size?[...FILTER.ops]:OPS.map(o=>o.id);
+  /* rows = op × shift; cols = all days */
+  let head='<tr><th class="rowlbl">Operation · shift</th>';
+  STATE.dates.forEach(d=>{head+=`<th class="${isWeekend(d)?'wend':''}">${d.getDate()}</th>`;});
+  head+='</tr>';
+  let rows='';
+  opSet.forEach(opId=>{
+    const op=OPS.find(o=>o.id===opId);
+    SHIFTS.forEach(s=>{
+      rows+=`<tr><td class="rowlbl">${op.flag} ${op.name} · <span style="color:var(--${s.color})">${s.short}</span></td>`;
+      STATE.dates.forEach((d,di)=>{
+        let have=0;STATE.agents.forEach(a=>{if(a.op===opId&&STATE.assign[a.id][di]===s.id){if(FILTER.markets.size&&!a.markets.some(m=>FILTER.markets.has(m)))return;have++;}});
+        const need=(isWeekend(d)?TARGETS.weekend:TARGETS.weekday)[s.id];
+        const ratio=need?have/need:1;
+        let bg,fg;
+        if(have===0&&need>0){bg='rgba(255,107,94,.85)';fg='#0a0c10';}
+        else if(ratio<1){bg='rgba(255,179,71,.7)';fg='#0a0c10';}
+        else if(ratio<1.5){bg='rgba(196,240,66,.55)';fg='#0a0c10';}
+        else{bg='rgba(196,240,66,.9)';fg='#0a0c10';}
+        rows+=`<td class="${isWeekend(d)?'wend':''}" style="background:${bg};color:${fg}" title="${op.name} ${s.name} ${iso(d)}: ${have}/${need}">${have}</td>`;
+      });
+      rows+='</tr>';
+    });
+  });
+  body.innerHTML=`<div class="heatwrap"><table class="heat"><thead>${head}</thead><tbody>${rows}</tbody></table></div>
+    <div class="legendrow"><span><i style="background:rgba(255,107,94,.85)"></i>no coverage</span><span><i style="background:rgba(255,179,71,.7)"></i>below target</span><span><i style="background:rgba(196,240,66,.55)"></i>at target</span><span><i style="background:rgba(196,240,66,.9)"></i>above target</span><span style="margin-left:auto;color:var(--dim)">read-only · edit in Week view</span></div>`;
+}
+function emptyBox(t,p){return `<div class="statebox"><div class="big">∅</div><h3>${t}</h3><p>${p}</p></div>`;}
+
+/* ============================================================
+   SCHEDULE TAB — bulk assignment + reset
+   ============================================================ */
+let bulkShift='morning', bulkDays=new Set([0,1,2,3,4]);  // day-of-week indices 0=Mon..6=Sun (display)
+function renderSchedule(){
+  const el=document.getElementById('view-schedule');
+  const agents=visibleAgents();
+  const dows=['Mon','Tue','Wed','Thu','Fri','Sat','Sun'];
+  el.innerHTML=`
+    <div class="insight"><span class="idot">◆</span><div>Select agents (checkboxes below or in the Coverage grid), choose a shift and the weekdays to apply, then bulk-assign across all ${Math.ceil(nDays()/7)} weeks. Conflicts created are reported — rules never block.</div></div>
+    <div class="bulkbar">
+      <h3>Bulk assign</h3>
+      <div class="sub">Applies to every matching weekday in the ${Math.ceil(nDays()/7)}-week horizon for the selected agents.</div>
+      <div class="bulkrow"><span class="k">Shift</span>
+        <div class="seg" id="bulkShiftSeg">${SHIFTS.map(s=>`<button class="${bulkShift===s.id?'on':''}" data-bs="${s.id}">${s.icon} ${s.name}</button>`).join('')}<button class="${bulkShift==='off'?'on':''}" data-bs="off">Off</button></div>
+      </div>
+      <div class="bulkrow"><span class="k">Weekdays</span>
+        <div class="daypick" id="bulkDays">${dows.map((d,i)=>`<span class="dchip ${bulkDays.has(i)?'on':''}" data-d="${i}">${d}</span>`).join('')}</div>
+      </div>
+      <div class="bulkrow"><span class="k">Agents</span>
+        <span class="selcount"><b>${bulkSel.size}</b> selected${FILTER.ops.size||FILTER.markets.size||FILTER.search?' · filtered pool: '+agents.length:''}</span>
+        <button class="btn sm" id="selAllFiltered">Select all filtered (${agents.length})</button>
+        <button class="btn sm" id="selClear">Clear</button>
+      </div>
+      <div class="bulkrow"><button class="btn acid" id="bulkApply" ${bulkSel.size===0?'disabled':''}>Apply to ${bulkSel.size} agent${bulkSel.size===1?'':'s'}</button>
+        <button class="btn" id="resetBtn">↺ Reset to generated</button></div>
+      <div class="applymsg" id="applyMsg"></div>
+    </div>
+    <div class="sectitle"><h2>Roster pool</h2><span class="k">tick to add to bulk selection</span></div>
+    <div id="poolWrap"></div>`;
+
+  el.querySelector('#bulkShiftSeg').querySelectorAll('[data-bs]').forEach(b=>b.onclick=()=>{bulkShift=b.dataset.bs;renderSchedule();});
+  el.querySelector('#bulkDays').querySelectorAll('[data-d]').forEach(c=>c.onclick=()=>{const i=+c.dataset.d;bulkDays.has(i)?bulkDays.delete(i):bulkDays.add(i);renderSchedule();});
+  el.querySelector('#selAllFiltered').onclick=()=>{agents.forEach(a=>bulkSel.add(a.id));renderSchedule();};
+  el.querySelector('#selClear').onclick=()=>{bulkSel.clear();renderSchedule();};
+  el.querySelector('#resetBtn').onclick=()=>{if(confirm('Discard all edits and regenerate the original synthetic roster?'))resetRoster();};
+  el.querySelector('#bulkApply').onclick=applyBulk;
+
+  /* pool table */
+  const viol=allViolations();
+  const groups={};agents.forEach(a=>{(groups[a.op]=groups[a.op]||[]).push(a);});
+  let rows='';
+  OPS.map(o=>o.id).filter(id=>groups[id]).forEach(opId=>{
+    const op=OPS.find(o=>o.id===opId);
+    rows+=`<tr><td colspan="4" style="background:var(--panel3);font-family:'Spline Sans Mono';font-size:11px;color:var(--muted)">${op.flag} ${op.name} · ${groups[opId].length}</td></tr>`;
+    groups[opId].forEach(a=>{
+      const av=avatarColor(a.op);
+      const work=STATE.assign[a.id].filter(s=>s!==OFF).length;
+      const hasV=viol[a.id]&&viol[a.id].rules.size>0;
+      rows+=`<tr class="clickable" data-pool="${a.id}">
+        <td><input type="checkbox" class="agcheck" data-bulk="${a.id}" ${bulkSel.has(a.id)?'checked':''}> <span class="avatar" style="background:${av.bg};color:${av.fg}">${initials(a.name)}</span> ${a.name}</td>
+        <td>${a.markets.map(m=>`<span class="pill">${m}</span>`).join(' ')}</td>
+        <td class="num">${work}d / ${nDays()}</td>
+        <td class="ctr">${hasV?'<span class="dot bad" title="'+[...viol[a.id].rules].map(ruleLabel).join(' · ')+'"></span>':'<span class="dot ok"></span>'}</td></tr>`;
+    });
+  });
+  document.getElementById('poolWrap').innerHTML=`<div class="tablewrap"><div class="gscroll2"><table class="lt"><thead><tr><th>Agent</th><th>Markets</th><th class="num">Worked</th><th class="ctr">Rules</th></tr></thead><tbody>${rows}</tbody></table></div></div>`;
+  document.querySelectorAll('#poolWrap [data-bulk]').forEach(cb=>cb.onclick=e=>{e.stopPropagation();const id=cb.dataset.bulk;cb.checked?bulkSel.add(id):bulkSel.delete(id);renderSchedule();});
+  document.querySelectorAll('#poolWrap [data-pool]').forEach(tr=>tr.onclick=()=>{const id=tr.dataset.pool;bulkSel.has(id)?bulkSel.delete(id):bulkSel.add(id);renderSchedule();});
+}
+function applyBulk(){
+  if(!bulkSel.size)return;
+  let changed=0;
+  STATE.dates.forEach((d,di)=>{
+    /* display weekday: Mon=0..Sun=6 */
+    const dow=(d.getDay()+6)%7;
+    if(!bulkDays.has(dow))return;
+    bulkSel.forEach(id=>{if(STATE.assign[id][di]!==bulkShift){STATE.assign[id][di]=bulkShift;changed++;}});
+  });
+  invalidateViol();saveRoster();
+  /* report conflicts among affected agents */
+  const viol=allViolations();
+  let conflicted=0;bulkSel.forEach(id=>{if(viol[id]&&viol[id].rules.size)conflicted++;});
+  const msg=document.getElementById('applyMsg');
+  msg.className='applymsg '+(conflicted?'warn':'ok');
+  msg.textContent=`✓ ${changed} assignment${changed===1?'':'s'} updated across ${bulkSel.size} agent${bulkSel.size===1?'':'s'}.`+(conflicted?` ⚠ ${conflicted} now carry a rule violation — review in Workload.`:' No new rule violations.');
+  renderSchedule();
+  document.getElementById('applyMsg').className='applymsg '+(conflicted?'warn':'ok');
+  document.getElementById('applyMsg').textContent=msg.textContent;
+}
+
+/* ============================================================
+   WORKLOAD TAB — per-agent balance + rule traffic lights
+   ============================================================ */
+let wSort={key:'work',dir:-1};
+function renderWorkload(){
+  const el=document.getElementById('view-workload');
+  const agents=visibleAgents();
+  if(!agents.length){el.innerHTML=emptyBox('No agents match these filters','Clear a filter.');return;}
+  const viol=allViolations();
+  const rows=agents.map(a=>{
+    const row=STATE.assign[a.id];
+    const work=row.filter(s=>s!==OFF).length;
+    const rest=nDays()-work;
+    const hours=work*8;
+    /* min gap observed between consecutive shifts */
+    let minGap=99;
+    for(let di=0;di<nDays()-1;di++){const x=row[di],y=row[di+1];if(x===OFF||y===OFF)continue;const g=(shiftStartHour(y)+24)-shiftEndHour(x);if(g<minGap)minGap=g;}
+    const v=viol[a.id];
+    return {a,work,rest,hours,minGap:minGap===99?null:minGap,
+      overwork:v.rules.has('overwork'),gap:v.rules.has('gap')};
+  });
+  rows.sort((x,y)=>{let d;if(wSort.key==='name')d=x.a.name.localeCompare(y.a.name);else if(wSort.key==='gap')d=(x.minGap??99)-(y.minGap??99);else d=x[wSort.key]-y[wSort.key];return d*wSort.dir;});
+
+  const breaches=rows.filter(r=>r.overwork||r.gap).length;
+  const avgWork=rows.reduce((s,r)=>s+r.work,0)/rows.length;
+  const head=[['name','Agent',0],['work','Days',1],['rest','Rest',1],['hours','Hours',1],['gap','Min gap',1],['rules','Rules',0]];
+  el.innerHTML=`
+    <div class="grid" style="grid-template-columns:repeat(auto-fit,minmax(130px,1fr));margin-bottom:16px">
+      <div class="metric"><div class="k">Agents</div><div class="v">${rows.length}</div></div>
+      <div class="metric"><div class="k">Avg days/period</div><div class="v">${fmt1(avgWork)}</div><div class="d flat">of ${nDays()}</div></div>
+      <div class="metric"><div class="k">Rule breaches</div><div class="v ${breaches?'danger':'up'}">${breaches}</div><div class="d ${breaches?'danger':'flat'}">${breaches?'review below':'all clear'}</div></div>
+    </div>
+    <div class="insight"><span class="idot">◆</span><div>Rules: <b>≤5 working days</b> in any rolling 7-day window, <b>≥12h</b> between consecutive shifts, one shift per day. Violations are flagged, not blocked — a planner advises, it doesn't lock you out.</div></div>
+    <div class="tablewrap"><div class="gscroll2"><table class="lt"><thead><tr>
+      ${head.map(([k,l,n])=>`<th class="${n?'num':''} ${wSort.key===k?'sorted':''}" data-ws="${k}">${l} <span class="arr">${wSort.key===k?(wSort.dir<0?'▼':'▲'):'↕'}</span></th>`).join('')}
+    </tr></thead><tbody>
+    ${rows.map(r=>{const av=avatarColor(r.a.op);return `<tr>
+      <td><span class="avatar" style="background:${av.bg};color:${av.fg}">${initials(r.a.name)}</span> ${r.a.name} <span style="color:var(--dim);font-size:11px">${r.a.flag}</span></td>
+      <td class="num">${r.work}</td><td class="num">${r.rest}</td><td class="num">${r.hours}</td>
+      <td class="num" style="color:${r.gap?'var(--bad)':'inherit'}">${r.minGap==null?'—':r.minGap+'h'}</td>
+      <td><span class="rulecell">
+        <span class="dot ${r.overwork?'bad':'ok'}" title="5/2 rule: ${r.overwork?'breached':'ok'}"></span>
+        <span class="dot ${r.gap?'bad':'ok'}" title="12h gap: ${r.gap?'breached':'ok'}"></span>
+        ${(r.overwork||r.gap)?'<span style="color:var(--bad);font-size:11px;margin-left:4px">'+[r.overwork?'5/2':'',r.gap?'12h':''].filter(Boolean).join(' · ')+'</span>':'<span style="color:var(--ok);font-size:11px;margin-left:4px">clear</span>'}
+      </span></td></tr>`;}).join('')}
+    </tbody></table></div></div>`;
+  el.querySelectorAll('[data-ws]').forEach(th=>th.onclick=()=>{const k=th.dataset.ws;if(k==='rules')return;if(wSort.key===k)wSort.dir*=-1;else{wSort.key=k;wSort.dir=-1;}renderWorkload();});
+}
+
+/* ============================================================
+   ANALYSIS TAB — management coverage KPIs
+   ============================================================ */
+function renderAnalysis(){
+  const el=document.getElementById('view-analysis');
+  /* aggregate over horizon honoring op/market filters */
+  let slots=0,covered=0,gapHours=0;
+  const byShift={morning:{need:0,have:0},late:{need:0,have:0},night:{need:0,have:0}};
+  const perDayGaps=[];
+  STATE.dates.forEach((d,di)=>{
+    let dayGap=0;
+    SHIFT_IDS.forEach(sid=>{
+      const need=targetSum(di,sid);
+      const cov=coverageFor(di,FILTER.ops)[sid];
+      slots+=need;covered+=Math.min(cov,need);
+      byShift[sid].need+=need;byShift[sid].have+=cov;
+      if(cov<need){gapHours+=(need-cov)*8;dayGap+=(need-cov);}
+    });
+    perDayGaps.push({di,d,gap:dayGap});
+  });
+  const covPct=slots?covered/slots*100:100;
+  const gapDays=perDayGaps.filter(x=>x.gap>0).length;
+
+  /* fairness: stdev of working days across visible agents */
+  const agents=visibleAgents();
+  const works=agents.map(a=>STATE.assign[a.id].filter(s=>s!==OFF).length);
+  const mean=works.reduce((s,x)=>s+x,0)/(works.length||1);
+  const sd=Math.sqrt(works.reduce((s,x)=>s+(x-mean)**2,0)/(works.length||1));
+
+  const viol=allViolations();
+  let breaches=0;agents.forEach(a=>{if(viol[a.id].rules.size)breaches++;});
+
+  el.innerHTML=`
+    <div class="insight"><span class="idot">◆</span><div>Coverage health across the ${Math.ceil(nDays()/7)}-week horizon for the current filter. A slot = one required agent-shift; coverage % is filled vs required. Gap-hours = unmet demand × 8h.</div></div>
+    <div class="grid" style="grid-template-columns:repeat(auto-fit,minmax(140px,1fr));margin-bottom:8px">
+      <div class="metric"><div class="k">Coverage</div><div class="v ${covPct>=99?'up':covPct>=92?'down':'danger'}">${fmt1(covPct)}%</div><div class="d flat">${fmt(covered)}/${fmt(slots)} slots</div></div>
+      <div class="metric"><div class="k">Gap-hours</div><div class="v ${gapHours?'danger':'up'}">${fmt(gapHours)}</div><div class="d flat">unmet demand</div></div>
+      <div class="metric"><div class="k">Days with gaps</div><div class="v ${gapDays?'down':'up'}">${gapDays}</div><div class="d flat">of ${nDays()}</div></div>
+      <div class="metric"><div class="k">Load fairness σ</div><div class="v">${fmt1(sd)}</div><div class="d flat">days, lower=fairer</div></div>
+      <div class="metric"><div class="k">Rule breaches</div><div class="v ${breaches?'danger':'up'}">${breaches}</div><div class="d flat">agents</div></div>
+    </div>
+    <div class="sectitle"><h2>Coverage vs target by shift</h2><span class="k">filled / required over horizon</span></div>
+    <div class="card"><div class="chartwrap" style="height:200px"><canvas id="anShift"></canvas></div></div>
+    <div class="sectitle"><h2>Daily gap trend</h2><span class="k">unmet agent-shifts per day</span></div>
+    <div class="card"><div class="chartwrap" style="height:210px"><canvas id="anGap"></canvas></div></div>`;
+  drawShiftChart(byShift);
+  drawGapChart(perDayGaps);
+}
+function drawShiftChart(byShift){
+  if(charts.an1)charts.an1.destroy();
+  const labels=SHIFTS.map(s=>s.name);
+  charts.an1=new Chart(document.getElementById('anShift'),{type:'bar',data:{labels,datasets:[
+    {label:'Filled',data:SHIFT_IDS.map(s=>byShift[s].have),backgroundColor:SHIFTS.map(s=>cssVar(s.color)),borderRadius:4},
+    {label:'Required',data:SHIFT_IDS.map(s=>byShift[s].need),backgroundColor:cssVar('line'),borderRadius:4}
+  ]},options:{responsive:true,maintainAspectRatio:false,plugins:{legend:{display:true,labels:{color:cssVar('muted'),font:{family:'Spline Sans Mono',size:10}}},tooltip:tt()},scales:{x:{grid:{display:false},ticks:{color:cssVar('muted'),font:{family:'Spline Sans Mono',size:11}}},y:{grid:{color:cssVar('grid')},ticks:{color:cssVar('muted'),font:{family:'Spline Sans Mono',size:9}}}}}});
+}
+function drawGapChart(perDay){
+  if(charts.an2)charts.an2.destroy();
+  charts.an2=new Chart(document.getElementById('anGap'),{type:'bar',data:{labels:perDay.map(x=>iso(x.d).slice(5)),datasets:[{label:'Gap',data:perDay.map(x=>x.gap),backgroundColor:perDay.map(x=>x.gap>0?cssVar('red'):cssVar('acid-fill')),borderRadius:3}]},options:{responsive:true,maintainAspectRatio:false,plugins:{legend:{display:false},tooltip:tt()},scales:{x:{grid:{display:false},ticks:{color:cssVar('muted'),font:{family:'Spline Sans Mono',size:8},maxRotation:0,autoSkip:true,maxTicksLimit:14}},y:{grid:{color:cssVar('grid')},ticks:{color:cssVar('muted'),font:{family:'Spline Sans Mono',size:9},precision:0}}}}});
+}
+function tt(){return{backgroundColor:cssVar('panel'),titleColor:cssVar('txt'),bodyColor:cssVar('muted'),borderColor:cssVar('line'),borderWidth:1,padding:10,titleFont:{family:'Spline Sans Mono'},bodyFont:{family:'Spline Sans Mono'}};}
+
+/* ============================================================
+   FILTERS
+   ============================================================ */
+function buildFilterChips(){
+  const opC=document.getElementById('opChips');
+  opC.innerHTML=`<span class="chip ${FILTER.ops.size===0?'on':''}" data-op="__all">All ops</span>`+OPS.map(o=>`<span class="chip ${FILTER.ops.has(o.id)?'on':''}" data-op="${o.id}">${o.flag} ${o.name}</span>`).join('');
+  opC.querySelectorAll('[data-op]').forEach(c=>c.onclick=()=>{const v=c.dataset.op;if(v==='__all')FILTER.ops.clear();else{FILTER.ops.has(v)?FILTER.ops.delete(v):FILTER.ops.add(v);}syncHash();renderAll();});
+  const mk=document.getElementById('marketChips');
+  if(mk.dataset.built!=='1'){mk.dataset.built='1';
+    mk.innerHTML=MARKETS.map(m=>`<span class="chip ${FILTER.markets.has(m.code)?'on':''}" data-mk="${m.code}">${m.code}</span>`).join('');
+    mk.querySelectorAll('[data-mk]').forEach(c=>c.onclick=()=>{const v=c.dataset.mk;FILTER.markets.has(v)?FILTER.markets.delete(v):FILTER.markets.add(v);c.classList.toggle('on');updateFilterSummary();renderAll();});}
+  const sh=document.getElementById('shiftChips');
+  if(sh.dataset.built!=='1'){sh.dataset.built='1';
+    sh.innerHTML=SHIFTS.map(s=>`<span class="chip ${FILTER.shifts.has(s.id)?'on':''}" data-sh="${s.id}">${s.icon} ${s.name}</span>`).join('');
+    sh.querySelectorAll('[data-sh]').forEach(c=>c.onclick=()=>{const v=c.dataset.sh;FILTER.shifts.has(v)?FILTER.shifts.delete(v):FILTER.shifts.add(v);c.classList.toggle('on');updateFilterSummary();renderAll();});}
+  updateFilterSummary();
+}
+function updateFilterSummary(){
+  const m=FILTER.markets.size?FILTER.markets.size+' markets':'all markets';
+  const s=FILTER.shifts.size?[...FILTER.shifts].map(x=>shiftMeta(x).name).join(', '):'all shifts';
+  document.getElementById('filtersummary').textContent=m+' · '+s;
+}
+
+/* ============================================================
+   CSV UPLOAD (roster import) + mapping
+   ============================================================ */
+const FIELD_HINTS={
+  agent:['agent','name','rep','user','employee','operator'],
+  date:['date','day','shiftdate','created'],
+  shift:['shift','schedule','rota','turno','slot'],
+  market:['market','country','region','queue'],
+  op:['operation','op','team','site','location']
+};
+let parsedCSV=null;
+function detectColumn(headers,field){const hints=FIELD_HINTS[field];for(const h of headers){const lo=h.toLowerCase().replace(/[^a-z]/g,'');for(const hint of hints){if(lo.includes(hint))return h;}}return '';}
+function handleFile(file){
+  Papa.parse(file,{header:true,skipEmptyLines:true,complete:res=>{
+    if(!res.data||!res.data.length||!res.meta.fields){alert('Empty or unreadable file.');return;}
+    parsedCSV={rows:res.data,headers:res.meta.fields};openMapModal();
+  },error:e=>alert('Could not parse file: '+e.message)});
+}
+function openMapModal(){
+  const headers=parsedCSV.headers;const det={};Object.keys(FIELD_HINTS).forEach(f=>det[f]=detectColumn(headers,f));
+  const opt=f=>`<option value="">— none —</option>`+headers.map(x=>`<option value="${x}" ${det[f]===x?'selected':''}>${x}</option>`).join('');
+  const fields=[['agent','Agent name',true],['date','Date',true],['shift','Shift',true],['market','Market',false],['op','Operation / team',false]];
+  document.getElementById('mapRows').innerHTML=fields.map(([f,l,r])=>`<div class="maprow"><label>${l} ${r?'<span class="req">*</span>':''}</label><select class="sel" data-f="${f}">${opt(f)}</select></div>`).join('');
+  document.getElementById('mapMsg').textContent='';document.getElementById('mapOverlay').classList.add('show');
+}
+function applyMapping(){
+  const map={};document.querySelectorAll('#mapRows select').forEach(s=>map[s.dataset.f]=s.value);
+  if(!map.agent||!map.date||!map.shift){document.getElementById('mapMsg').textContent='Agent, date and shift are required.';return;}
+  /* build date axis from data */
+  const dateset=new Set();const recs=[];
+  parsedCSV.rows.forEach(r=>{
+    const name=(r[map.agent]||'').toString().trim();if(!name)return;
+    const dd=new Date((r[map.date]||'').toString().trim());if(isNaN(dd))return;
+    const di=iso(dd);dateset.add(di);
+    let sraw=(r[map.shift]||'').toString().toLowerCase();
+    let sid=SHIFTS.find(s=>sraw.includes(s.id)||sraw.includes(s.name.toLowerCase())||sraw.includes(s.short.toLowerCase()))?.id||OFF;
+    if(/off|rest|libre|free/.test(sraw))sid=OFF;
+    recs.push({name,di,sid,market:map.market?(r[map.market]||'').toString().trim():'',op:map.op?(r[map.op]||'').toString().trim():''});
+  });
+  const dlist=[...dateset].sort();
+  if(!dlist.length){document.getElementById('mapMsg').textContent='No valid dates parsed.';return;}
+  const dates=dlist.map(s=>new Date(s+'T00:00:00'));
+  const dateIndex={};dlist.forEach((d,i)=>dateIndex[d]=i);
+  const agByName={};const assign={};const agents=[];
+  recs.forEach(r=>{
+    if(!agByName[r.name]){const id='u'+agents.length;const ag={id,name:r.name,first:r.name.split(' ')[0],last:r.name.split(' ').slice(1).join(' ')||'',op:r.op||'csv',opName:r.op||'Uploaded',flag:'📄',markets:new Set()};agByName[r.name]=ag;agents.push(ag);assign[id]=new Array(dates.length).fill(OFF);}
+    const ag=agByName[r.name];if(r.market)ag.markets.add(r.market);
+    const di=dateIndex[r.di];if(di!=null)assign[ag.id][di]=r.sid;
+  });
+  agents.forEach(a=>a.markets=[...a.markets].length?[...a.markets]:['N/A']);
+  /* override globals minimally: we keep DAYS-driven loops working by reassigning STATE.dates length */
+  STATE={agents,dates,assign,source:'csv'};
+  /* recompute DAYS-dependent constants via STATE.dates.length where used dynamically */
+  window.__CSV_DAYS=dates.length;
+  FILTER={ops:new Set(),markets:new Set(),shifts:new Set(),search:''};
+  document.getElementById('marketChips').dataset.built='';document.getElementById('shiftChips').dataset.built='';
+  document.getElementById('mapOverlay').classList.remove('show');
+  document.getElementById('datasrclabel').textContent='Your roster · '+agents.length+' agents · '+dates.length+' days';
+  setSrc('upload');weekOffset=0;dayIdxSel=0;invalidateViol();renderAll();
+}
+
+/* ============================================================
+   EXPORT (long-format roster CSV)
+   ============================================================ */
+function exportCSV(){
+  const lines=['agent,operation,date,shift'];
+  STATE.agents.forEach(a=>{STATE.assign[a.id].forEach((s,di)=>{lines.push(`"${a.name}",${a.opName},${iso(STATE.dates[di])},${s}`);});});
+  const blob=new Blob([lines.join('\n')],{type:'text/csv'});const url=URL.createObjectURL(blob);
+  const el=document.createElement('a');el.href=url;el.download='shift-planner-roster.csv';el.click();URL.revokeObjectURL(url);
+}
+
+/* ============================================================
+   THEME + TABS + HASH + WIRE
+   ============================================================ */
+function setTheme(t){document.documentElement.setAttribute('data-theme',t);try{localStorage.setItem(LS_THEME,t);}catch(e){}setTimeout(()=>{Object.values(charts).forEach(c=>{try{c.destroy();}catch(e){}});charts={};renderAll();},20);}
+function initTheme(){let t='dark';try{t=localStorage.getItem(LS_THEME)||(matchMedia('(prefers-color-scheme: light)').matches?'light':'dark');}catch(e){}document.documentElement.setAttribute('data-theme',t);}
+function setTab(t){activeTab=t;document.querySelectorAll('.tab').forEach(b=>b.classList.toggle('on',b.dataset.tab===t));syncHash();renderAll();}
+function syncHash(){location.hash=`t=${activeTab}${activeTab==='coverage'?'&g='+covGran:''}${FILTER.ops.size?'&op='+[...FILTER.ops].join(','):''}`;}
+function readHash(){const p=new URLSearchParams(location.hash.replace('#',''));if(p.get('t'))activeTab=p.get('t');if(p.get('g'))covGran=p.get('g');if(p.get('op'))p.get('op').split(',').forEach(o=>FILTER.ops.add(o));}
+function setSrc(s){document.getElementById('src-demo').classList.toggle('on',s==='demo');document.getElementById('src-upload').classList.toggle('on',s==='upload');}
+function loadDemo(){STATE=generateRoster();loadSavedRoster();TARGETS=TARGETS||{weekday:{...TARGET_WEEKDAY},weekend:{...TARGET_WEEKEND}};FILTER={ops:new Set(),markets:new Set(),shifts:new Set(),search:''};document.getElementById('marketChips').dataset.built='';document.getElementById('shiftChips').dataset.built='';document.getElementById('datasrclabel').textContent='Synthetic demo data · no real records';setSrc('demo');weekOffset=0;dayIdxSel=0;invalidateViol();renderAll();}
+
+function init(){
+  initTheme();readHash();
+  STATE=generateRoster();loadSavedRoster();
+  document.querySelectorAll('.tab').forEach(b=>{b.onclick=()=>setTab(b.dataset.tab);b.classList.toggle('on',b.dataset.tab===activeTab);});
+  document.getElementById('themeBtn').onclick=()=>setTheme(document.documentElement.getAttribute('data-theme')==='dark'?'light':'dark');
+  document.getElementById('filterhead').onclick=()=>document.getElementById('filterbar').classList.toggle('open');
+  document.getElementById('searchInput').oninput=e=>{FILTER.search=e.target.value.toLowerCase();renderAll();};
+  document.getElementById('src-demo').onclick=loadDemo;
+  document.getElementById('src-upload').onclick=()=>document.getElementById('fileInput').click();
+  document.getElementById('fileInput').onchange=e=>{if(e.target.files[0])handleFile(e.target.files[0]);e.target.value='';};
+  document.getElementById('mapApply').onclick=applyMapping;
+  document.getElementById('mapCancel').onclick=()=>document.getElementById('mapOverlay').classList.remove('show');
+  document.getElementById('mapClose').onclick=()=>document.getElementById('mapOverlay').classList.remove('show');
+  document.getElementById('exportBtn').onclick=exportCSV;
+  window.addEventListener('resize',()=>{const p=document.getElementById('selpop');if(p)p.classList.remove('show');});
+  renderAll();
+}
+window.loadDemo=loadDemo;
+document.addEventListener('DOMContentLoaded',init);
+
+</script>
+</body>
+</html>
