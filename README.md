@@ -27,7 +27,7 @@ The planner opens on a ready-made roster — 48 agents across 4 operations, 10 m
 
 ## Part of an operations ecosystem
 
-Shift Planner is one of five control surfaces for a single multi-hub operation, built to follow one decision down the whole chain — *from the shift being covered to the cash being collected*:
+Shift Planner is one of six control surfaces for a single multi-hub operation, built to follow one decision down the whole chain — *from the shift being covered to the cash being collected*:
 
 | Stage | Tool | The question it answers |
 |---|---|---|
